@@ -1,0 +1,67 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node / package managers
+node_modules/
+.npm/
+.pnpm-store/
+
+# Build / bundler outputs (common for extension projects)
+dist/
+build/
+out/
+coverage/
+.cache/
+.tmp/
+tmp/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+playwright-report/
+test-results/
+.nyc_output/
+
+# Packaged browser extension artifacts
+*.zip
+*.crx
+*.xpi
+web-ext-artifacts/
+
+# Local database/runtime artifacts (if using SQLite bridge or local service)
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python (only if local helper scripts/services are added)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Optional lockfiles for package manager choice (keep one if standardized)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
