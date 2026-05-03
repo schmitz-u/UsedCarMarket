@@ -49,6 +49,8 @@ web-ext-artifacts/
 
 # Extracted example portal pages (keep only the source zips)
 Input/Examples/extracted_*/
+# Explicitly keep example zips despite the *.zip rule below
+!Input/Examples/*.zip
 
 # Local database/runtime artifacts (if using SQLite bridge or local service)
 *.sqlite
