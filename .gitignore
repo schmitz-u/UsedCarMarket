@@ -47,6 +47,9 @@ test-results/
 *.xpi
 web-ext-artifacts/
 
+# Extracted example portal pages (keep only the source zips)
+Input/Examples/extracted_*/
+
 # Local database/runtime artifacts (if using SQLite bridge or local service)
 *.sqlite
 *.sqlite3
