@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Used Vehicle Market Analyzer</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fa; color: #222; }
+    header { background: #1a5276; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    .badge { background: #2e86c1; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; }
+    main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid #d0d7de; }
+    .tab-btn { padding: 10px 20px; border: none; background: none; cursor: pointer; font-size: 0.95rem; color: #555; border-bottom: 3px solid transparent; margin-bottom: -2px; }
+    .tab-btn.active { color: #1a5276; font-weight: 600; border-bottom-color: #1a5276; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Cards */
+    .card { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 14px; color: #1a5276; }
+
+    /* Upload area */
+    #drop-zone { border: 2px dashed #adb5bd; border-radius: 8px; padding: 40px; text-align: center; cursor: pointer; transition: border-color .2s; background: #f8f9fa; }
+    #drop-zone:hover, #drop-zone.drag-over { border-color: #1a5276; background: #eaf2ff; }
+    #drop-zone svg { opacity: .4; margin-bottom: 12px; }
+    #drop-zone p { color: #666; font-size: 0.9rem; }
+    #file-input { display: none; }
+    .upload-btn { display: inline-block; margin-top: 12px; padding: 8px 20px; background: #1a5276; color: #fff; border-radius: 6px; font-size: 0.9rem; cursor: pointer; }
+
+    /* Status banners */
+    .status { padding: 10px 16px; border-radius: 6px; font-size: 0.9rem; margin-bottom: 12px; display: none; }
+    .status.info { background: #d6eaf8; border: 1px solid #2e86c1; display: block; }
+    .status.success { background: #d5f5e3; border: 1px solid #27ae60; display: block; }
+    .status.warn { background: #fef9e7; border: 1px solid #f39c12; display: block; }
+    .status.error { background: #fadbd8; border: 1px solid #e74c3c; display: block; }
+
+    /* Review form */
+    .confidence-badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+    .conf-high { background: #d5f5e3; color: #1e8449; }
+    .conf-med { background: #fef9e7; color: #b7770d; }
+    .conf-low { background: #fadbd8; color: #c0392b; }
+    .field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    .field-item label { display: block; font-size: 0.8rem; color: #555; margin-bottom: 4px; }
+    .field-item input { width: 100%; padding: 7px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+    .field-item input.low-conf { border-color: #e74c3c; background: #fff8f8; }
+    .field-item input.med-conf { border-color: #f39c12; }
+    .existing-warn { color: #7d6608; background: #fef9e7; border: 1px solid #f39c12; border-radius: 6px; padding: 8px 14px; font-size: 0.85rem; margin-bottom: 12px; display: none; }
+
+    /* Buttons */
+    .btn { padding: 9px 22px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 500; }
+    .btn-primary { background: #1a5276; color: #fff; }
+    .btn-primary:hover { background: #154360; }
+    .btn-secondary { background: #eaecee; color: #222; }
+    .btn-secondary:hover { background: #d0d3d4; }
+    .btn-danger { background: #e74c3c; color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 0.82rem; }
+    .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+
+    /* Spinner */
+    .spinner { display: none; width: 20px; height: 20px; border: 3px solid #ccc; border-top-color: #1a5276; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Filters */
+    .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .filter-grid label { display: block; font-size: 0.8rem; color: #555; margin-bottom: 4px; }
+    .filter-grid input, .filter-grid select { width: 100%; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.85rem; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { background: #1a5276; color: #fff; padding: 10px 12px; text-align: left; white-space: nowrap; }
+    td { padding: 9px 12px; border-bottom: 1px solid #eaecee; white-space: nowrap; }
+    tr:nth-child(even) td { background: #f8f9fa; }
+    tr.highlighted td { background: #fff3cd !important; animation: fadehl 3s ease-out forwards; }
+    @keyframes fadehl { 0%{background:#fff3cd} 100%{background:transparent} }
+    tr:hover td { background: #eaf2ff; }
+    .url-link { color: #2e86c1; text-decoration: none; max-width: 160px; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+
+    /* Chart */
+    #scatter-chart { width: 100%; height: 460px; }
+
+    /* Logs */
+    #log-area { background: #1e2329; color: #c9d1d9; font-family: monospace; font-size: 0.8rem; padding: 14px; border-radius: 6px; max-height: 420px; overflow-y: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17h18M3 17l1.5-5h15L21 17M3 17l-1-2m19 2 1-2M7 17v2m10-2v2"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="7" r="2"/></svg>
+  <h1>Used Vehicle Market Analyzer</h1>
+  <span class="badge">MVP</span>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="ingest">📤 Upload &amp; Review</button>
+    <button class="tab-btn" data-tab="analysis">📊 Analysis</button>
+    <button class="tab-btn" data-tab="logs">🔍 Logs</button>
+  </div>
+
+  <!-- =================== UPLOAD TAB =================== -->
+  <div class="tab-panel active" id="tab-ingest">
+    <div class="card">
+      <h2>Upload Screenshot</h2>
+      <div id="drop-zone">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <p>Drag &amp; drop a PNG or JPG screenshot here</p>
+        <label class="upload-btn" for="file-input">Choose File</label>
+        <input type="file" id="file-input" accept="image/png,image/jpeg" />
+      </div>
+      <div id="upload-status" class="status"></div>
+      <div id="spinner-wrap" style="display:none;margin-top:12px;display:flex;gap:8px;align-items:center">
+        <div class="spinner" id="spinner" style="display:inline-block"></div>
+        <span style="font-size:.85rem;color:#555">Running OCR &amp; extracting fields…</span>
+      </div>
+    </div>
+
+    <div class="card" id="review-card" style="display:none">
+      <h2>Review &amp; Correct Extracted Fields</h2>
+      <div id="portal-badge" style="margin-bottom:10px;font-size:.85rem;color:#555"></div>
+      <div id="existing-warn" class="existing-warn">⚠ This listing appears to already be in the database. Saving will update the record and append a new price history entry.</div>
+      <div class="field-grid" id="field-grid"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="save-btn">💾 Save to Database</button>
+        <button class="btn btn-secondary" id="reset-btn">✕ Discard</button>
+        <div class="spinner" id="save-spinner"></div>
+        <span id="save-status" style="font-size:.85rem"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================== ANALYSIS TAB =================== -->
+  <div class="tab-panel" id="tab-analysis">
+    <div class="card">
+      <h2>Filter</h2>
+      <div class="filter-grid">
+        <div><label>Source Portal</label><select id="f-source"><option value="">All</option><option value="mobile.de">mobile.de</option><option value="autoscout24">AutoScout24</option></select></div>
+        <div><label>Brand</label><input id="f-brand" placeholder="e.g. Honda" /></div>
+        <div><label>Model</label><input id="f-model" placeholder="e.g. Gold Wing" /></div>
+        <div><label>Year from</label><input id="f-year-min" type="number" placeholder="2010" /></div>
+        <div><label>Year to</label><input id="f-year-max" type="number" placeholder="2026" /></div>
+        <div><label>KM from</label><input id="f-km-min" type="number" placeholder="0" /></div>
+        <div><label>KM to</label><input id="f-km-max" type="number" placeholder="100000" /></div>
+        <div><label>Price from (€)</label><input id="f-price-min" type="number" placeholder="0" /></div>
+        <div><label>Price to (€)</label><input id="f-price-max" type="number" placeholder="50000" /></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" id="apply-filters-btn">Apply Filters</button>
+        <button class="btn btn-secondary btn-sm" id="reset-filters-btn">Reset</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Scatter Plot — Year vs. Mileage (colour = price)</h2>
+      <div id="scatter-chart"></div>
+    </div>
+
+    <div class="card">
+      <h2>Listings (<span id="listing-count">0</span>)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Portal</th><th>Brand</th><th>Model</th><th>Year</th>
+              <th>KM</th><th>Price €</th><th>Fuel</th><th>Transmission</th>
+              <th>Color</th><th>City</th><th>URL</th><th>Saved</th>
+            </tr>
+          </thead>
+          <tbody id="listings-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- =================== LOGS TAB =================== -->
+  <div class="tab-panel" id="tab-logs">
+    <div class="card">
+      <h2>Operation Logs</h2>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-secondary btn-sm" id="refresh-logs-btn">Refresh</button>
+        <a class="btn btn-secondary btn-sm" href="/api/logs/export" download="ucm_logs.json">⬇ Export JSON</a>
+      </div>
+      <div id="log-area">No logs yet.</div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* -------- Utility -------- */
+const $ = id => document.getElementById(id);
+const fmt = n => n == null ? '—' : Number(n).toLocaleString('de-DE');
+
+/* -------- Tab switching -------- */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'analysis') loadListings();
+    if (btn.dataset.tab === 'logs') loadLogs();
+  });
+});
+
+/* -------- State -------- */
+let _extractionData = null;
+let _lastSavedId = null;
+
+/* -------- Upload / Drop zone -------- */
+const dropZone = $('drop-zone');
+const fileInput = $('file-input');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) processFile(fileInput.files[0]); });
+
+async function processFile(file) {
+  showStatus('upload-status', 'info', `Processing "${file.name}"…`);
+  $('review-card').style.display = 'none';
+  $('spinner-wrap').style.display = 'flex';
+  $('spinner').style.display = 'inline-block';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    _extractionData = data;
+    showStatus('upload-status', 'success', `Extracted fields from "${file.name}" (confidence: ${(data.overall_confidence * 100).toFixed(0)}%)`);
+    renderReviewForm(data);
+  } catch (err) {
+    showStatus('upload-status', 'error', 'Upload/OCR failed: ' + err.message);
+  } finally {
+    $('spinner-wrap').style.display = 'none';
+    fileInput.value = '';
+  }
+}
+
+/* -------- Review form -------- */
+const FIELD_META = [
+  { key: 'url',                    label: 'Listing URL',       type: 'text' },
+  { key: 'brand',                  label: 'Brand',             type: 'text' },
+  { key: 'model',                  label: 'Model',             type: 'text' },
+  { key: 'year',                   label: 'Year',              type: 'number' },
+  { key: 'first_registration',     label: 'First Registration',type: 'text' },
+  { key: 'mileage_km',             label: 'Mileage (km)',      type: 'number' },
+  { key: 'price_amount',           label: 'Price (€)',         type: 'number' },
+  { key: 'price_currency',         label: 'Currency',          type: 'text' },
+  { key: 'fuel_type',              label: 'Fuel Type',         type: 'text' },
+  { key: 'transmission',           label: 'Transmission',      type: 'text' },
+  { key: 'power_kw',               label: 'Power (kW)',        type: 'number' },
+  { key: 'engine_displacement_cc', label: 'Displacement (cc)', type: 'number' },
+  { key: 'color',                  label: 'Color',             type: 'text' },
+  { key: 'vehicle_type',           label: 'Vehicle Type',      type: 'text' },
+  { key: 'vehicle_category',       label: 'Category',          type: 'text' },
+  { key: 'location_city',          label: 'City',              type: 'text' },
+  { key: 'condition',              label: 'Condition',         type: 'text' },
+  { key: 'previous_owner_count',   label: 'Previous Owners',   type: 'number' },
+];
+
+function confClass(c) {
+  if (c >= 0.85) return 'conf-high';
+  if (c >= 0.6)  return 'conf-med';
+  return 'conf-low';
+}
+function inputClass(c, v) {
+  if (!v) return 'low-conf';
+  if (c < 0.6) return 'low-conf';
+  if (c < 0.85) return 'med-conf';
+  return '';
+}
+
+function renderReviewForm(data) {
+  const grid = $('field-grid');
+  grid.innerHTML = '';
+  const fields = data.fields;
+
+  for (const fm of FIELD_META) {
+    const fe = fields[fm.key] || { value: null, confidence: 0 };
+    const conf = fe.confidence || 0;
+    const val = fe.value ?? '';
+    const confLabel = conf > 0
+      ? `<span class="confidence-badge ${confClass(conf)}">${(conf * 100).toFixed(0)}%</span>`
+      : '';
+    const div = document.createElement('div');
+    div.className = 'field-item';
+    div.innerHTML = `
+      <label>${fm.label}${confLabel}</label>
+      <input type="${fm.type}" data-key="${fm.key}" value="${escHtml(String(val))}" class="${inputClass(conf, val)}" />
+    `;
+    grid.appendChild(div);
+  }
+
+  $('portal-badge').textContent = data.portal
+    ? `Portal detected: ${data.portal}`
+    : 'Portal not detected — please fill fields manually';
+
+  const ew = $('existing-warn');
+  ew.style.display = data.existing_id ? 'block' : 'none';
+
+  $('review-card').style.display = 'block';
+  $('review-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function collectFormFields() {
+  const out = {};
+  document.querySelectorAll('#field-grid input[data-key]').forEach(inp => {
+    out[inp.dataset.key] = { value: inp.value.trim() || null, confidence: 1.0 };
+  });
+  return out;
+}
+
+/* -------- Save -------- */
+$('save-btn').addEventListener('click', async () => {
+  const fields = collectFormFields();
+  const url = fields.url?.value;
+  const brand = fields.brand?.value;
+  if (!url && !brand) {
+    $('save-status').textContent = '⚠ Please fill in at least URL or Brand.';
+    return;
+  }
+  $('save-spinner').style.display = 'inline-block';
+  $('save-status').textContent = '';
+  const body = {
+    portal: _extractionData?.portal,
+    image_hash: _extractionData?.image_hash,
+    filename: _extractionData?.filename,
+    fields,
+  };
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    _lastSavedId = data.id;
+    $('save-status').textContent = `✓ ${data.action === 'inserted' ? 'Saved as new entry' : 'Updated existing entry'} (ID ${data.id})`;
+    $('save-status').style.color = '#1e8449';
+    $('review-card').style.display = 'none';
+    showStatus('upload-status', 'success', `Listing ${data.action} in database (ID ${data.id})`);
+  } catch (err) {
+    $('save-status').textContent = '✗ Save failed: ' + err.message;
+    $('save-status').style.color = '#e74c3c';
+  } finally {
+    $('save-spinner').style.display = 'none';
+  }
+});
+
+$('reset-btn').addEventListener('click', () => {
+  $('review-card').style.display = 'none';
+  $('upload-status').className = 'status';
+  _extractionData = null;
+});
+
+/* -------- Analysis -------- */
+async function loadListings() {
+  const params = new URLSearchParams();
+  const addParam = (id, key) => { const v = $(id).value.trim(); if (v) params.set(key, v); };
+  addParam('f-source', 'source');
+  addParam('f-brand', 'brand');
+  addParam('f-model', 'model');
+  addParam('f-year-min', 'year_min');
+  addParam('f-year-max', 'year_max');
+  addParam('f-km-min', 'km_min');
+  addParam('f-km-max', 'km_max');
+  addParam('f-price-min', 'price_min');
+  addParam('f-price-max', 'price_max');
+
+  const res = await fetch('/api/listings?' + params);
+  const rows = await res.json();
+  renderTable(rows);
+  renderChart(rows);
+}
+
+function renderTable(rows) {
+  $('listing-count').textContent = rows.length;
+  const tbody = $('listings-tbody');
+  tbody.innerHTML = '';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.id === _lastSavedId) tr.className = 'highlighted';
+    tr.innerHTML = `
+      <td>${r.id}</td>
+      <td>${r.source_marketplace || '—'}</td>
+      <td>${r.brand || '—'}</td>
+      <td>${r.model || '—'}</td>
+      <td>${r.year || '—'}</td>
+      <td>${r.mileage_km != null ? fmt(r.mileage_km) : '—'}</td>
+      <td>${r.price_amount != null ? fmt(r.price_amount) : '—'}</td>
+      <td>${r.fuel_type || '—'}</td>
+      <td>${r.transmission || '—'}</td>
+      <td>${r.color || '—'}</td>
+      <td>${r.location_city || '—'}</td>
+      <td>${r.url ? `<a class="url-link" href="${escHtml(r.url)}" target="_blank" rel="noopener" title="${escHtml(r.url)}">${escHtml(r.url)}</a>` : '—'}</td>
+      <td style="font-size:.8rem;color:#666">${r.extraction_timestamp_utc?.slice(0,16).replace('T',' ') || '—'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderChart(rows) {
+  const valid = rows.filter(r => r.year != null && r.mileage_km != null);
+  if (!valid.length) {
+    Plotly.purge('scatter-chart');
+    return;
+  }
+  const prices = valid.map(r => r.price_amount || 0);
+  const maxP = Math.max(...prices) || 1;
+  const colors = prices.map(p => p / maxP);
+  const hoverText = valid.map(r =>
+    `${r.brand || ''} ${r.model || ''}<br>Year: ${r.year}<br>KM: ${fmt(r.mileage_km)}<br>Price: ${fmt(r.price_amount)} €`
+  );
+  const trace = {
+    x: valid.map(r => r.year),
+    y: valid.map(r => r.mileage_km),
+    mode: 'markers',
+    type: 'scatter',
+    text: hoverText,
+    hovertemplate: '%{text}<extra></extra>',
+    marker: {
+      size: 11,
+      color: colors,
+      colorscale: 'RdYlGn',
+      reversescale: true,
+      colorbar: { title: 'Price (relative)', thickness: 16 },
+      line: { color: '#555', width: 0.5 },
+      symbol: valid.map(r => r.id === _lastSavedId ? 'star' : 'circle'),
+    },
+  };
+  const layout = {
+    xaxis: { title: 'Year', dtick: 1 },
+    yaxis: { title: 'Mileage (km)' },
+    margin: { t: 20, b: 60, l: 70, r: 20 },
+    paper_bgcolor: '#fff',
+    plot_bgcolor: '#f8f9fa',
+  };
+  Plotly.react('scatter-chart', [trace], layout, { responsive: true });
+}
+
+$('apply-filters-btn').addEventListener('click', loadListings);
+$('reset-filters-btn').addEventListener('click', () => {
+  ['f-source','f-brand','f-model','f-year-min','f-year-max','f-km-min','f-km-max','f-price-min','f-price-max']
+    .forEach(id => { const el = $(id); if (el.tagName === 'SELECT') el.value = ''; else el.value = ''; });
+  loadListings();
+});
+
+/* -------- Logs -------- */
+async function loadLogs() {
+  const res = await fetch('/api/logs');
+  const logs = await res.json();
+  $('log-area').textContent = logs.length
+    ? logs.map(l => JSON.stringify(l)).join('\n')
+    : 'No logs yet.';
+}
+$('refresh-logs-btn').addEventListener('click', loadLogs);
+
+/* -------- Helpers -------- */
+function showStatus(id, type, msg) {
+  const el = $(id);
+  el.className = `status ${type}`;
+  el.textContent = msg;
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
