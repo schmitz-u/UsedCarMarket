@@ -12,7 +12,8 @@ from app.models import VehicleListing
 
 @pytest.fixture()
 def db():
-    tmp = tempfile.mktemp(suffix=".db")
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
     import app.db as db_mod
     original_path = db_mod.DB_PATH
     db_mod.DB_PATH = tmp

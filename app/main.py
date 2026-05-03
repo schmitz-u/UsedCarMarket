@@ -126,18 +126,28 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
             return v.get("value")
         return v
 
-    price_raw = _get("price_amount")
-    price = float(price_raw) if price_raw else None
-    year_raw = _get("year")
-    year = int(year_raw) if year_raw else None
-    mileage_raw = _get("mileage_km")
-    mileage = int(mileage_raw) if mileage_raw else None
-    power_raw = _get("power_kw")
-    power = float(power_raw) if power_raw else None
-    disp_raw = _get("engine_displacement_cc")
-    disp = int(disp_raw) if disp_raw else None
-    owners_raw = _get("previous_owner_count")
-    owners = int(owners_raw) if owners_raw else None
+    def _to_float(raw: Optional[str], field: str = "value") -> Optional[float]:
+        if not raw:
+            return None
+        try:
+            return float(raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid numeric value for {field}: {raw!r}")
+
+    def _to_int(raw: Optional[str], field: str = "value") -> Optional[int]:
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid integer value for {field}: {raw!r}")
+
+    price = _to_float(_get("price_amount"), "price_amount")
+    year = _to_int(_get("year"), "year")
+    mileage = _to_int(_get("mileage_km"), "mileage_km")
+    power = _to_float(_get("power_kw"), "power_kw")
+    disp = _to_int(_get("engine_displacement_cc"), "engine_displacement_cc")
+    owners = _to_int(_get("previous_owner_count"), "previous_owner_count")
 
     url = _get("url")
     brand = _get("brand")

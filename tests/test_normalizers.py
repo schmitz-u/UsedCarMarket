@@ -23,7 +23,7 @@ class TestNormalizePrice:
         assert normalize_price("€ 12.000") == 12000.0
 
     def test_comma_decimal(self):
-        assert normalize_price("9.999,50 €") == pytest.approx(999950.0, rel=1e-3) or normalize_price("9.999,50 €") is not None
+        assert normalize_price("9.999,50 €") == pytest.approx(9999.5, rel=1e-3)
 
     def test_plain_number(self):
         assert normalize_price("12000") == 12000.0

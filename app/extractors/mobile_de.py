@@ -53,6 +53,20 @@ _URL_PATTERN = re.compile(
     r"(?:https?://)?(?:suchen\.)?mobile\.de/fahrzeuge/details[\w./=&?%-]*", re.I
 )
 _ID_FROM_URL = re.compile(r"[?&]id=(\d+)", re.I)
+_RE_KILOMETERSTAND = re.compile(r"Kilometerstand", re.I)
+_RE_LEISTUNG = re.compile(r"Leistung", re.I)
+_RE_KRAFTSTOFF = re.compile(r"Kraftstoffart|Antriebsart", re.I)
+_RE_GETRIEBE = re.compile(r"^Getriebe$", re.I)
+_RE_ERSTZULASSUNG = re.compile(r"Erstzulassung", re.I)
+_RE_HALTER = re.compile(r"Fahrzeughalter|Vorbesitzer", re.I)
+_RE_FARBE = re.compile(r"^Farbe$", re.I)
+_RE_HUBRAUM = re.compile(r"Hubraum", re.I)
+_RE_ZUSTAND = re.compile(r"^Zustand$", re.I)
+_RE_FUEL_VALUE = re.compile(r"^(Benzin|Diesel|Elektro|Hybrid|Gas|LPG|CNG|Wasserstoff)", re.I)
+_RE_TRANS_VALUE = re.compile(r"^(Automatik|Schaltgetriebe|Manuell|Halbautomatik|CVT)", re.I)
+_RE_KM_VALUE = re.compile(r"([\d\s\.\,]+)\s*km", re.I)
+_RE_LOCATION_DE = re.compile(r"DE-(\d{5})\s+(.+)")
+_RE_LOCATION_PLAIN = re.compile(r"^(\d{5})\s+(.+)")
 
 
 def extract(ocr_text: str) -> ExtractionResult:
@@ -110,37 +124,37 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
     for i, line in enumerate(lines):
         next_lines = lines[i + 1: i + 4]
 
-        if re.search(r"Kilometerstand", line, re.I):
+        if _RE_KILOMETERSTAND.search(line):
             for nxt in next_lines:
-                raw = re.search(r"([\d\s\.\,]+)\s*km", nxt, re.I)
+                raw = _RE_KM_VALUE.search(nxt)
                 if raw:
                     val = normalize_mileage(raw.group())
                     if val is not None:
                         result.mileage_km = FieldExtraction(str(val), 0.9, nxt)
                         break
 
-        elif re.search(r"Leistung", line, re.I):
+        elif _RE_LEISTUNG.search(line):
             for nxt in next_lines:
                 val = normalize_power_kw(nxt)
                 if val is not None:
                     result.power_kw = FieldExtraction(str(val), 0.9, nxt)
                     break
 
-        elif re.search(r"Kraftstoffart|Antriebsart", line, re.I):
+        elif _RE_KRAFTSTOFF.search(line):
             for nxt in next_lines:
-                m = re.match(r"(Benzin|Diesel|Elektro|Hybrid|Gas|LPG|CNG|Wasserstoff)", nxt, re.I)
+                m = _RE_FUEL_VALUE.match(nxt)
                 if m:
                     result.fuel_type = FieldExtraction(m.group(1), 0.9, nxt)
                     break
 
-        elif re.search(r"^Getriebe$", line, re.I):
+        elif _RE_GETRIEBE.search(line):
             for nxt in next_lines:
-                m = re.match(r"(Automatik|Schaltgetriebe|Manuell|Halbautomatik|CVT)", nxt, re.I)
+                m = _RE_TRANS_VALUE.match(nxt)
                 if m:
                     result.transmission = FieldExtraction(m.group(1), 0.9, nxt)
                     break
 
-        elif re.search(r"Erstzulassung", line, re.I):
+        elif _RE_ERSTZULASSUNG.search(line):
             for nxt in next_lines:
                 reg_str, year = normalize_first_registration(nxt)
                 if reg_str:
@@ -149,45 +163,43 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
                         result.year = FieldExtraction(str(year), 0.8, nxt)
                     break
 
-        elif re.search(r"Fahrzeughalter|Vorbesitzer", line, re.I):
+        elif _RE_HALTER.search(line):
             for nxt in next_lines:
                 val = normalize_previous_owners(nxt)
                 if val is not None:
                     result.previous_owner_count = FieldExtraction(str(val), 0.9, nxt)
                     break
 
-        elif re.search(r"^Farbe$", line, re.I):
+        elif _RE_FARBE.search(line):
             if next_lines:
                 result.color = FieldExtraction(next_lines[0], 0.8, next_lines[0])
 
-        elif re.search(r"Hubraum", line, re.I):
+        elif _RE_HUBRAUM.search(line):
             for nxt in next_lines:
                 val = normalize_displacement(nxt)
                 if val is not None:
                     result.engine_displacement_cc = FieldExtraction(str(val), 0.85, nxt)
                     break
 
-        elif re.search(r"^Zustand$", line, re.I):
+        elif _RE_ZUSTAND.search(line):
             if next_lines:
                 result.condition = FieldExtraction(next_lines[0], 0.8, next_lines[0])
 
-        m_loc = re.search(r"DE-(\d{5})\s+(.+)", line)
+        m_loc = _RE_LOCATION_DE.search(line)
         if m_loc and not result.location_city.value:
             result.location_city = FieldExtraction(m_loc.group(2).strip(), 0.8, line)
-        elif re.match(r"\d{5}\s+\w", line) and not result.location_city.value:
+        elif _RE_LOCATION_PLAIN.match(line) and not result.location_city.value:
             parts = line.split(None, 1)
             if len(parts) == 2:
                 result.location_city = FieldExtraction(parts[1].strip(), 0.75, line)
 
     _try_extract_year_from_title(lines, result)
 
-
 def _try_extract_year_from_title(lines: list[str], result: ExtractionResult) -> None:
     if result.year.value:
         return
     for line in lines:
-        if re.search(r"Modell\s+(\d{4})", line, re.I):
-            m = re.search(r"Modell\s+(\d{4})", line, re.I)
-            if m:
-                result.year = FieldExtraction(m.group(1), 0.75, line)
-                return
+        m = re.search(r"Modell\s+(\d{4})", line, re.I)
+        if m:
+            result.year = FieldExtraction(m.group(1), 0.75, line)
+            return

@@ -87,7 +87,7 @@ class TestMobileDeExtractor:
         assert self.result.first_registration.value == "03/2026"
 
     def test_year(self):
-        assert self.result.year.value in ("2026", None) or self.result.year.value is not None
+        assert self.result.year.value == "2026"
 
     def test_owners(self):
         assert self.result.previous_owner_count.value == "1"
