@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Used Vehicle Market Analyzer",
+  "version": "0.1.0",
+  "description": "Extract and analyze used vehicle listings locally",
+  "permissions": ["storage", "sidePanel", "activeTab"],
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.mobile.de/fahrzeuge/details*",
+        "*://*.autoscout24.de/angebote/*"
+      ],
+      "js": ["src/content/index.ts"]
+    }
+  ],
+  "action": {
+    "default_title": "Used Vehicle Market Analyzer"
+  }
+}
