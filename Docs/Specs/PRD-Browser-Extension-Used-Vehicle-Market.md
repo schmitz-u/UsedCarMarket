@@ -14,7 +14,7 @@ The product is a browser extension (primary target: Microsoft Edge, with compati
 
 The extension will:
 1. Extract listing characteristics from offer pages.
-2. Store extracted data in a local SQLite database.
+2. Store extracted data in local IndexedDB object stores.
 3. Provide analysis and visual pricing insights based on selected filters.
 
 The initial focus is to define and deliver a reliable MVP data-capture pipeline before advanced analysis features.
@@ -46,7 +46,7 @@ A local structured dataset plus visual analysis enables better understanding of 
    - Marketplace/source
    - Timestamp of extraction
 3. Explicit user action button to trigger analysis and storage of the currently visible offer.
-4. Local storage to SQLite via extension-compatible architecture (for example: background service + local companion process/API if needed by browser constraints).
+4. Local storage to IndexedDB inside the extension runtime (no external companion process required).
 5. Basic analysis screen with filtering and a color-coded chart/table where price is the dependent variable.
 6. Parallel workflow where the offer page and analysis view can be open side-by-side.
 7. Immediate update of analysis information after new storage action, with visual indication of newly added entry.
@@ -71,7 +71,7 @@ A local structured dataset plus visual analysis enables better understanding of 
 5. The extension shall show whether the currently visible listing is already present in the database.
 
 ### FR-2: Data Storage
-1. Captured data shall be persisted to SQLite.
+1. Captured data shall be persisted to IndexedDB.
 2. The data model shall support motorcycles first and be extensible for other vehicle types.
 3. The system shall store extraction timestamp and source metadata.
 4. The system shall store price history so that multiple price values over time can exist for the same listing.
@@ -119,10 +119,10 @@ A local structured dataset plus visual analysis enables better understanding of 
 3. Background service worker:
    - Orchestration, validation, dedup checks, and post-save analysis refresh event.
 4. Persistence layer:
-   - SQLite database access through a local bridge process/API if direct browser access is restricted.
+   - IndexedDB object stores managed via a typed persistence module in the service worker.
 
-## 9. Data Model (Initial Draft)
-Table: vehicle_listings
+## 9. Data Model (Logical Schema for IndexedDB)
+Object Store: vehicle_listings
 1.  id (PK)
 2.  source_marketplace (text)             # e.g. mobile.de, autoscout24.de
 3.  listing_id (text, nullable)            # portal-native ID (integer or UUID depending on portal)
@@ -148,7 +148,7 @@ Table: vehicle_listings
 23. extraction_timestamp_utc (text)
 24. raw_payload_json (text, nullable)      # full extracted payload for reprocessing
 
-Table: listing_price_history
+Object Store: listing_price_history
 1. id (PK)
 2. vehicle_listing_id (FK -> vehicle_listings.id)
 3. observed_price_amount (real)
@@ -256,15 +256,15 @@ Missing fields are set to `null`. Parsers must not throw on missing fields — t
 
 ## 11. MVP Milestones
 1. Milestone 1: Extension skeleton + one marketplace parser + local save flow.
-2. Milestone 2: SQLite schema + dedup + error logging.
+2. Milestone 2: IndexedDB schema + dedup + error logging.
 3. Milestone 3: Basic filter UI + first color-coded price analysis view.
 4. Milestone 4: Hardening, browser compatibility checks, and docs.
 
 ## 12. Risks and Mitigations
 1. Marketplace DOM changes break parsers.
    - Mitigation: parser abstraction and selector versioning.
-2. Browser restrictions for local SQLite access.
-   - Mitigation: local companion service with minimal API.
+2. Browser storage limits and IndexedDB schema migration issues.
+   - Mitigation: explicit versioned migrations, index strategy, and periodic cleanup/compaction jobs.
 3. Data inconsistency across marketplaces.
    - Mitigation: canonical normalization pipeline and source-specific mapping.
 
@@ -276,5 +276,3 @@ Missing fields are set to `null`. Parsers must not throw on missing fields — t
 
 ## 14. Open Questions
 1. Should capture be purely manual, semi-automatic, or fully automatic while browsing?
-2. Is SQLite required inside the extension package, or is a local companion app acceptable?
-3. Which chart type is preferred for the first analysis screen (heatmap, scatter, or matrix table)?
