@@ -13,7 +13,32 @@ or fixtures under `Input/Examples/Screenshots/`.
 
 ---
 
-## Prerequisites
+## Quick Start — Dev Container (recommended, works on Windows)
+
+The easiest way to run the app without installing Python or Tesseract locally.
+Requires **Docker Desktop** and **VS Code** with the
+[Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+
+1. Open the repository folder in VS Code.
+2. When prompted *"Reopen in Container"*, click it (or run
+   **Dev Containers: Reopen in Container** from the Command Palette).
+3. VS Code builds the image once — Python 3.12 + Tesseract OCR are pre-installed.
+4. Inside the container terminal, start the app:
+
+```bash
+uvicorn app.main:application --reload --host 0.0.0.0 --port 8000
+```
+
+5. Open your browser at **http://localhost:8000** (VS Code forwards port 8000 automatically).
+
+> **GitHub Codespaces**: the devcontainer also works in Codespaces — click
+> **Code → Codespaces → Create codespace** and the environment is ready in minutes.
+
+---
+
+## Manual Setup (Linux / macOS)
+
+### Prerequisites
 
 | Requirement | Version |
 |---|---|
@@ -32,28 +57,18 @@ sudo apt-get install -y tesseract-ocr tesseract-ocr-deu
 brew install tesseract tesseract-lang
 ```
 
-**Windows**  
-Download the installer from <https://github.com/UB-Mannheim/tesseract/wiki>.
-
----
-
-## Setup
+### Install Python dependencies
 
 ```bash
-# Create and activate a virtual environment
 python3 -m venv .venv
-source .venv/bin/activate    # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
-# Install Python dependencies
 pip install -r requirements.txt
 ```
 
----
-
-## Running the App
+### Run
 
 ```bash
-# From the repository root
 uvicorn app.main:application --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -86,7 +101,7 @@ UCM_DB_PATH=/data/ucm.db uvicorn app.main:application --reload
 ## Running Tests
 
 ```bash
-# From the repository root
+# From the repository root (inside the container or with the venv active)
 pytest tests/ -v
 ```
 
@@ -104,6 +119,10 @@ Test files:
 ## Project Structure
 
 ```
+.devcontainer/
+  devcontainer.json    VS Code / Codespaces devcontainer config
+  Dockerfile           Python 3.12 + Tesseract OCR image
+
 app/
   main.py              FastAPI application (routes)
   models.py            Canonical vehicle listing + extraction result models
@@ -138,7 +157,7 @@ Input/
 
 | Portal | Detection | Key Fields |
 |---|---|---|
-| mobile.de | URL `suchen.mobile.de` or text "mobile.de" | data-testid label/value pairs in OCR |
+| mobile.de | URL `suchen.mobile.de` or text "mobile.de" | Label/value pairs in OCR text |
 | AutoScout24 | URL `autoscout24.de` or text "autoscout24" | Label/value pairs + title pattern |
 
 ---
