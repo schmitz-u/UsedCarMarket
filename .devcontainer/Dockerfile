@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 # Install Tesseract OCR + German and English language data, plus build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
         tesseract-ocr \
         tesseract-ocr-deu \
         tesseract-ocr-eng \

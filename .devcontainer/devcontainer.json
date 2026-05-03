@@ -28,7 +28,13 @@
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.terminal.activateEnvironment": false,
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "workbench.colorCustomizations": {
+          "statusBar.background": "#1f7a1f",
+          "statusBar.foreground": "#ffffff",
+          "statusBar.noFolderBackground": "#1f7a1f",
+          "statusBar.noFolderForeground": "#ffffff"
+        }
       }
     }
   },
