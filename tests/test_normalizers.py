@@ -16,6 +16,7 @@ from app.normalizers import (
     generate_fingerprint,
     detect_portal,
     harmonize_listing_title,
+    infer_engine_displacement_cc,
     validate_harmonized_listing,
     HarmonizationConflict,
 )
@@ -213,6 +214,23 @@ class TestHarmonizeListingTitle:
         out = harmonize_listing_title("Honda", "Gold Wing Tourer")
         assert out["trim_normalized"] == "Tour"
 
+    def test_url_bagger_sets_trim(self):
+        out = harmonize_listing_title(
+            "Honda",
+            "Gold Wing",
+            year=2020,
+            source_url="https://www.autoscout24.de/angebote/honda-gold-wing-gl1800-bagger-top-zustand",
+        )
+        assert out["trim_normalized"] == "Bagger"
+
+    def test_series_identifier_detected(self):
+        out = harmonize_listing_title("Honda", "Gold Wing SC 22", year=1998)
+        assert out["series_identifier"] == "SC22"
+
+    def test_gold_wing_default_type_tour(self):
+        out = harmonize_listing_title("Honda", "Gold Wing", year=2022)
+        assert out["trim_normalized"] == "Tour"
+
     def test_condition_normalizes_seller_dealer(self):
         out = harmonize_listing_title("Honda", "Gold Wing", condition="Händler")
         assert out["seller_normalized"] == "Händler"
@@ -251,9 +269,13 @@ class TestValidateHarmonizedListing:
             validate_harmonized_listing(h, 2010)
 
     def test_f6b_after_2016_raises(self):
-        h = harmonize_listing_title("Honda", "F6B", year=2019)
+        h = harmonize_listing_title("Honda", "F6B", year=2020)
         with pytest.raises(HarmonizationConflict, match="F6B"):
-            validate_harmonized_listing(h, 2019)
+            validate_harmonized_listing(h, 2020)
+
+    def test_f6b_2017_registration_is_allowed(self):
+        h = harmonize_listing_title("Honda", "F6B", year=2017)
+        validate_harmonized_listing(h, 2017)
 
     def test_dct_before_2018_raises(self):
         h = harmonize_listing_title("Honda", "Gold Wing DCT", year=2015)
@@ -267,3 +289,14 @@ class TestValidateHarmonizedListing:
     def test_missing_year_always_passes(self):
         h = harmonize_listing_title("Honda", "GL 1800")
         validate_harmonized_listing(h, None)  # must not raise
+
+
+class TestInferEngineDisplacementCc:
+    def test_gl1500(self):
+        assert infer_engine_displacement_cc("GL 1500", 1998) == 1520
+
+    def test_gl1800_pre_2018(self):
+        assert infer_engine_displacement_cc("GL 1800", 2012) == 1832
+
+    def test_gl1800_2018_plus(self):
+        assert infer_engine_displacement_cc("GL 1800", 2022) == 1833

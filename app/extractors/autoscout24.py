@@ -49,6 +49,16 @@ _TRANSMISSION_PATTERN = re.compile(
 )
 _SELLER_PATTERN = re.compile(r"\b(Händler|Haendler|Handler|Privat|Gewerblich)\b", re.I)
 _CITY_BLACKLIST = {"CHECK24", "Drucken", "Gemerkt", "Teilen", "Vergleichen"}
+_FUEL_CANONICAL = {
+    "benzin": "Benzin",
+    "diesel": "Diesel",
+    "elektro": "Elektro",
+    "hybrid": "Hybrid",
+    "gas": "Gas",
+    "lpg": "LPG",
+    "cng": "CNG",
+    "wasserstoff": "Wasserstoff",
+}
 
 
 def extract(ocr_text: str) -> ExtractionResult:
@@ -102,6 +112,10 @@ def _extract_price(lines: list[str]) -> tuple[FieldExtraction, FieldExtraction]:
     return FieldExtraction(None, 0.0), FieldExtraction(None, 0.0)
 
 
+def _canon_fuel(raw: str) -> str:
+    return _FUEL_CANONICAL.get(raw.lower(), raw)
+
+
 def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> None:
     for i, line in enumerate(lines):
         next_lines = lines[i + 1 : i + 4]
@@ -136,12 +150,14 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
             for nxt in next_lines:
                 m = _FUEL_PATTERN.search(nxt)
                 if m:
-                    result.fuel_type = FieldExtraction(m.group(1), 0.9, nxt)
+                    result.fuel_type = FieldExtraction(_canon_fuel(m.group(1)), 0.9, nxt)
                     break
             if not result.fuel_type.value:
                 m = _FUEL_PATTERN.search(line)
                 if m:
-                    result.fuel_type = FieldExtraction(m.group(1), 0.85, line)
+                    result.fuel_type = FieldExtraction(
+                        _canon_fuel(m.group(1)), 0.85, line
+                    )
 
         if re.search(r"\bGetriebe\b", line, re.I):
             for nxt in next_lines:
@@ -236,7 +252,7 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
         if not result.fuel_type.value:
             m = _FUEL_PATTERN.search(line)
             if m:
-                result.fuel_type = FieldExtraction(m.group(1), 0.7, line)
+                result.fuel_type = FieldExtraction(_canon_fuel(m.group(1)), 0.7, line)
 
         if not result.transmission.value:
             m = _TRANSMISSION_PATTERN.search(line)

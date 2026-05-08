@@ -16,19 +16,28 @@ _BRAND_ALIASES = {
 }
 
 _FAMILY_PATTERNS = [
-    re.compile(r"\bgold\s*wing\b", re.I),
+    re.compile(r"\bgold[-\s]*wing\b", re.I),
     re.compile(r"\bgoldwing\b", re.I),
 ]
 
 _VARIANT_PATTERNS = [
+    (re.compile(r"\bgl[-\s]*1000\b", re.I), "GL 1000"),
+    (re.compile(r"\b1000\b", re.I), "GL 1000"),
+    (re.compile(r"\bgl[-\s]*1100\b", re.I), "GL 1100"),
+    (re.compile(r"\b1100\b", re.I), "GL 1100"),
+    (re.compile(r"\bgl[-\s]*1200\b", re.I), "GL 1200"),
+    (re.compile(r"\b1200\b", re.I), "GL 1200"),
+    (re.compile(r"\bgl[-\s]*1500\b", re.I), "GL 1500"),
+    (re.compile(r"\b1500\b", re.I), "GL 1500"),
     (re.compile(r"\bgl\s*1800\b", re.I), "GL 1800"),
     (re.compile(r"\b1800\b", re.I), "GL 1800"),
 ]
 
 _TRIM_PATTERNS = [
-    (re.compile(r"\bf6b\b", re.I), "F6B"),
+    (re.compile(r"\bf[6bgöóo]b\b", re.I), "F6B"),
     (re.compile(r"\bbagger\b", re.I), "Bagger"),
     (re.compile(r"\btourer\b", re.I), "Tourer"),
+    (re.compile(r"\btouring\b", re.I), "Tour"),
     (re.compile(r"\btour\b", re.I), "Tour"),
 ]
 
@@ -53,6 +62,8 @@ _SELLER_PATTERNS = [
     (re.compile(r"\b(h[aä]ndler|haendler|dealer|gewerb\w*)\b", re.I), "Händler"),
     (re.compile(r"\b(privat|privatanbieter|private)\b", re.I), "Privat"),
 ]
+
+_SERIES_CODE_PATTERN = re.compile(r"\bsc[-\s]*\d{2,3}[a-z]?\b", re.I)
 
 
 def normalize_price(raw: str) -> Optional[float]:
@@ -195,6 +206,7 @@ _TRIM_YEAR_RANGES: dict[str, tuple[int, Optional[int]]] = {
 
 # DCT was introduced with the 2018 platform.
 _DCT_MIN_YEAR = 2018
+_REGISTRATION_LAG_YEARS = 2
 
 
 def validate_harmonized_listing(
@@ -216,7 +228,7 @@ def validate_harmonized_listing(
     # 1. Variant vs. year
     if variant and variant in _VARIANT_YEAR_RANGES:
         lo, hi = _VARIANT_YEAR_RANGES[variant]
-        if not (lo <= year <= hi):
+        if not (lo <= year <= hi + _REGISTRATION_LAG_YEARS):
             raise HarmonizationConflict(
                 f"Year {year} is outside the known production range "
                 f"{lo}–{hi} for {variant}."
@@ -227,7 +239,9 @@ def validate_harmonized_listing(
         if trim in _TRIM_YEAR_RANGES:
             lo, hi = _TRIM_YEAR_RANGES[trim]
             hi_display = hi if hi is not None else "present"
-            if year < lo or (hi is not None and year > hi):
+            if year < lo or (
+                hi is not None and year > hi + _REGISTRATION_LAG_YEARS
+            ):
                 raise HarmonizationConflict(
                     f"Year {year} is outside the known production range "
                     f"{lo}–{hi_display} for trim '{trim}'."
@@ -255,34 +269,38 @@ def harmonize_listing_title(
     transmission: Optional[str] = None,
     condition: Optional[str] = None,
     year: Optional[int] = None,
+    source_url: Optional[str] = None,
 ) -> dict[str, Optional[str]]:
     """Normalize noisy title fragments into canonical motorcycle model attributes."""
     raw_brand = (brand or "").strip()
     raw_model = (model or "").strip()
     raw_transmission = (transmission or "").strip()
     raw_condition = (condition or "").strip()
+    raw_url = (source_url or "").strip()
 
     brand_norm = _normalize_brand(raw_brand)
     text_blob = " ".join(
-        x for x in [raw_model, raw_transmission, raw_condition] if x
+        x for x in [raw_model, raw_transmission, raw_condition, raw_url] if x
     ).strip()
 
     family = _detect_family(text_blob, brand_norm)
     variant = _detect_variant(text_blob, family, year)
-    trims = _detect_trims(text_blob, year)
+    trims = _detect_trims(text_blob, family, variant, year)
     gearbox = _detect_gearbox(text_blob)
+    series_code = _detect_series_code(text_blob)
     marketing_tags = _detect_marketing_tags(text_blob)
     ownership_hint = _detect_ownership_hint(text_blob)
     seller_norm = normalize_seller_type(raw_condition)
 
     title_harmonized = _compose_harmonized_title(
-        brand_norm, family, variant, trims, gearbox
+        brand_norm, family, variant, trims, gearbox, series_code
     )
 
     return {
         "brand_normalized": brand_norm,
         "model_family_normalized": family,
         "model_variant_normalized": variant,
+        "series_identifier": series_code,
         "trim_normalized": " / ".join(trims) if trims else None,
         "drivetrain_or_gearbox_normalized": gearbox,
         "marketing_tags_json": ",".join(marketing_tags) if marketing_tags else None,
@@ -325,7 +343,7 @@ def _detect_variant(
 ) -> Optional[str]:
     if not family:
         return None
-    m = re.search(r"\bgl\s*(1000|1100|1200|1500|1800)\b", text_blob, re.I)
+    m = re.search(r"\bgl[-\s]*(1000|1100|1200|1500|1800)\b", text_blob, re.I)
     if m:
         return f"GL {m.group(1)}"
     for pat, label in _VARIANT_PATTERNS:
@@ -347,7 +365,12 @@ def _detect_variant(
     return None
 
 
-def _detect_trims(text_blob: str, year: Optional[int]) -> list[str]:
+def _detect_trims(
+    text_blob: str,
+    family: Optional[str],
+    variant: Optional[str],
+    year: Optional[int],
+) -> list[str]:
     trims: list[str] = []
     for pat, label in _TRIM_PATTERNS:
         if pat.search(text_blob):
@@ -366,6 +389,13 @@ def _detect_trims(text_blob: str, year: Optional[int]) -> list[str]:
         and 2013 <= year <= 2016
     ):
         trims.insert(0, "F6B")
+
+    # Default Gold Wing type classification when no explicit trim is found.
+    if not trims and family == "Gold Wing":
+        if variant in {"GL 1100", "GL 1200", "GL 1500", "GL 1800"}:
+            trims.append("Tour")
+        elif variant is None and year is not None and year >= 1980:
+            trims.append("Tour")
 
     # De-duplicate while preserving order.
     deduped: list[str] = []
@@ -397,12 +427,39 @@ def _detect_ownership_hint(text_blob: str) -> Optional[str]:
     return None
 
 
+def _detect_series_code(text_blob: str) -> Optional[str]:
+    m = _SERIES_CODE_PATTERN.search(text_blob)
+    if not m:
+        return None
+    return re.sub(r"[-\s]+", "", m.group(0)).upper()
+
+
+def infer_engine_displacement_cc(
+    variant: Optional[str], year: Optional[int]
+) -> Optional[int]:
+    """Infer Gold Wing engine displacement when OCR did not capture Hubraum/cc."""
+    if variant == "GL 1000":
+        return 999
+    if variant == "GL 1100":
+        return 1085
+    if variant == "GL 1200":
+        return 1182
+    if variant == "GL 1500":
+        return 1520
+    if variant == "GL 1800":
+        if year is not None and year >= 2018:
+            return 1833
+        return 1832
+    return None
+
+
 def _compose_harmonized_title(
     brand_norm: Optional[str],
     family: Optional[str],
     variant: Optional[str],
     trims: list[str],
     gearbox: Optional[str],
+    series_code: Optional[str],
 ) -> Optional[str]:
     parts: list[str] = []
     if brand_norm:
@@ -411,6 +468,8 @@ def _compose_harmonized_title(
         parts.append(family)
     if variant:
         parts.append(variant)
+    if series_code:
+        parts.append(series_code)
     parts.extend(trims)
     if gearbox:
         parts.append(f"({gearbox})")

@@ -28,6 +28,7 @@ from app.models import VehicleListing
 from app.normalizers import (
     generate_fingerprint,
     harmonize_listing_title,
+    infer_engine_displacement_cc,
     normalize_seller_type,
     validate_harmonized_listing,
     HarmonizationConflict,
@@ -184,7 +185,14 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
     transmission = _get("transmission")
     condition = _get("condition")
 
-    harmonized = harmonize_listing_title(brand, model, transmission, condition, year)
+    harmonized = harmonize_listing_title(
+        brand,
+        model,
+        transmission,
+        condition,
+        year,
+        source_url=url,
+    )
 
     try:
         validate_harmonized_listing(harmonized, year)
@@ -197,11 +205,26 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
             detail="At least one of 'url' or 'brand' must be provided.",
         )
 
+    if disp is None:
+        disp = infer_engine_displacement_cc(harmonized["model_variant_normalized"], year)
+
+    canonical_variant = harmonized["model_variant_normalized"]
+    canonical_series = harmonized.get("series_identifier")
+    canonical_model = model
+    if canonical_variant:
+        canonical_model = (
+            f"{canonical_variant} {canonical_series}"
+            if canonical_series
+            else canonical_variant
+        )
+    if not canonical_model:
+        canonical_model = harmonized["model_family_normalized"]
+
     listing = VehicleListing(
         source_marketplace=payload.get("portal"),
         url=url,
         brand=brand,
-        model=model,
+        model=canonical_model,
         brand_normalized=harmonized["brand_normalized"],
         model_family_normalized=harmonized["model_family_normalized"],
         model_variant_normalized=harmonized["model_variant_normalized"],
@@ -390,6 +413,7 @@ def update_listing(listing_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         merged.get("transmission"),
         merged.get("condition"),
         merged.get("year"),
+        source_url=merged.get("url"),
     )
     try:
         validate_harmonized_listing(harmonized, merged.get("year"))
@@ -406,6 +430,10 @@ def update_listing(listing_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         updates["trim_normalized"] = harmonized["trim_normalized"]
     updates["marketing_tags_json"] = harmonized["marketing_tags_json"]
     updates["ownership_hint"] = harmonized["ownership_hint"]
+    if "engine_displacement_cc" not in updates:
+        updates["engine_displacement_cc"] = infer_engine_displacement_cc(
+            harmonized["model_variant_normalized"], merged.get("year")
+        )
     if "seller_normalized" not in updates:
         updates["seller_normalized"] = harmonized[
             "seller_normalized"
