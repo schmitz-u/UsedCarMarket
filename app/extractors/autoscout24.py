@@ -34,8 +34,21 @@ _TITLE_PATTERN = re.compile(
     r"|Fiat|Alfa|Porsche)\s+(.+?)(?:\s+in\s+|\s+für\s+|\s*$)",
     re.I,
 )
-_ID_FROM_URL = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.I)
+_ID_FROM_URL = re.compile(
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.I
+)
 _LOCATION_PATTERN = re.compile(r"(\d{5})\s+([\w\s,\-]+?)(?:,\s*DE\b|$)", re.I)
+_CITY_PIN_PATTERN = re.compile(
+    r"©\s+([A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\s,\-\.]{1,60})\s*\|", re.I
+)
+_FUEL_PATTERN = re.compile(
+    r"\b(Benzin|Diesel|Elektro|Hybrid|Gas|LPG|CNG|Wasserstoff)\b", re.I
+)
+_TRANSMISSION_PATTERN = re.compile(
+    r"\b(Automatik|Schaltgetriebe|Manuell|Halbautomatik|CVT|DCT)\b", re.I
+)
+_SELLER_PATTERN = re.compile(r"\b(Händler|Haendler|Handler|Privat|Gewerblich)\b", re.I)
+_CITY_BLACKLIST = {"CHECK24", "Drucken", "Gemerkt", "Teilen", "Vergleichen"}
 
 
 def extract(ocr_text: str) -> ExtractionResult:
@@ -91,7 +104,7 @@ def _extract_price(lines: list[str]) -> tuple[FieldExtraction, FieldExtraction]:
 
 def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> None:
     for i, line in enumerate(lines):
-        next_lines = lines[i + 1: i + 4]
+        next_lines = lines[i + 1 : i + 4]
 
         if re.search(r"Kilometerstand", line, re.I):
             for nxt in next_lines:
@@ -108,7 +121,7 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
                     if val is not None:
                         result.mileage_km = FieldExtraction(str(val), 0.85, line)
 
-        elif re.search(r"Leistung", line, re.I):
+        if re.search(r"Leistung", line, re.I):
             for nxt in next_lines:
                 val = normalize_power_kw(nxt)
                 if val is not None:
@@ -119,23 +132,29 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
                 if val is not None:
                     result.power_kw = FieldExtraction(str(val), 0.85, line)
 
-        elif re.search(r"Kraftstoffart|Antriebsart", line, re.I):
+        if re.search(r"Kraftstoff|Antriebsart", line, re.I):
             for nxt in next_lines:
-                m = re.match(r"(Benzin|Diesel|Elektro|Hybrid|Gas|LPG|CNG|Wasserstoff)", nxt, re.I)
+                m = _FUEL_PATTERN.search(nxt)
                 if m:
                     result.fuel_type = FieldExtraction(m.group(1), 0.9, nxt)
                     break
+            if not result.fuel_type.value:
+                m = _FUEL_PATTERN.search(line)
+                if m:
+                    result.fuel_type = FieldExtraction(m.group(1), 0.85, line)
 
-        elif re.search(r"^Getriebe$", line, re.I):
+        if re.search(r"\bGetriebe\b", line, re.I):
             for nxt in next_lines:
-                m = re.match(
-                    r"(Automatik|Schaltgetriebe|Manuell|Halbautomatik|CVT)", nxt, re.I
-                )
+                m = _TRANSMISSION_PATTERN.search(nxt)
                 if m:
                     result.transmission = FieldExtraction(m.group(1), 0.9, nxt)
                     break
+            if not result.transmission.value:
+                m = _TRANSMISSION_PATTERN.search(line)
+                if m:
+                    result.transmission = FieldExtraction(m.group(1), 0.85, line)
 
-        elif re.search(r"Erstzulassung", line, re.I):
+        if re.search(r"Erstzulassung", line, re.I):
             for nxt in next_lines:
                 reg_str, year = normalize_first_registration(nxt)
                 if reg_str:
@@ -149,6 +168,31 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
                     result.first_registration = FieldExtraction(reg_str, 0.85, line)
                     if year and result.year.value is None:
                         result.year = FieldExtraction(str(year), 0.75, line)
+
+        if re.search(r"Verkäufer|Verkaufer", line, re.I):
+            for nxt in next_lines:
+                m = _SELLER_PATTERN.search(nxt)
+                if m:
+                    label = (
+                        "Händler"
+                        if re.search(
+                            r"h[aä]ndler|haendler|gewerblich", m.group(1), re.I
+                        )
+                        else "Privat"
+                    )
+                    result.seller_type = FieldExtraction(label, 0.9, nxt)
+                    break
+            if not result.seller_type.value:
+                m = _SELLER_PATTERN.search(line)
+                if m:
+                    label = (
+                        "Händler"
+                        if re.search(
+                            r"h[aä]ndler|haendler|gewerblich", m.group(1), re.I
+                        )
+                        else "Privat"
+                    )
+                    result.seller_type = FieldExtraction(label, 0.85, line)
 
         elif re.search(r"Vorbesitzer|Fahrzeughalter|Besitzer", line, re.I):
             for nxt in next_lines:
@@ -181,10 +225,33 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
             city = m_loc.group(2).strip().rstrip(",")
             result.location_city = FieldExtraction(city, 0.8, line)
 
+        if not result.location_city.value:
+            m_pin = _CITY_PIN_PATTERN.search(line)
+            if m_pin:
+                city = m_pin.group(1).strip().rstrip(",")
+                city = re.sub(r",\s*(Stadt|Kreis)\b", "", city, flags=re.I).strip()
+                if 2 <= len(city) <= 60 and city not in _CITY_BLACKLIST:
+                    result.location_city = FieldExtraction(city, 0.85, line)
+
         if not result.fuel_type.value:
-            m = re.match(r"^(Benzin|Diesel|Elektro|Hybrid|Gas|LPG|CNG|Wasserstoff)$", line, re.I)
+            m = _FUEL_PATTERN.search(line)
             if m:
                 result.fuel_type = FieldExtraction(m.group(1), 0.7, line)
+
+        if not result.transmission.value:
+            m = _TRANSMISSION_PATTERN.search(line)
+            if m:
+                result.transmission = FieldExtraction(m.group(1), 0.7, line)
+
+        if not result.seller_type.value:
+            m = _SELLER_PATTERN.search(line)
+            if m:
+                label = (
+                    "Händler"
+                    if re.search(r"h[aä]ndler|haendler|gewerblich", m.group(1), re.I)
+                    else "Privat"
+                )
+                result.seller_type = FieldExtraction(label, 0.7, line)
 
     _try_extract_from_title(lines, result)
 
@@ -192,8 +259,12 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
 def _try_extract_from_title(lines: list[str], result: ExtractionResult) -> None:
     for line in lines:
         if not result.color.value:
-            m = re.search(r"\bin\s+(Schwarz|Weiß|Blau|Rot|Grün|Orange|Grau|Silber|Gelb|Braun|"
-                          r"Beige|Bordeaux|Bronze|Gold|Lila|Pink|Türkis)\b", line, re.I)
+            m = re.search(
+                r"\bin\s+(Schwarz|Weiß|Blau|Rot|Grün|Orange|Grau|Silber|Gelb|Braun|"
+                r"Beige|Bordeaux|Bronze|Gold|Lila|Pink|Türkis)\b",
+                line,
+                re.I,
+            )
             if m:
                 result.color = FieldExtraction(m.group(1), 0.75, line)
 
@@ -203,7 +274,11 @@ def _try_extract_from_title(lines: list[str], result: ExtractionResult) -> None:
                 result.year = FieldExtraction(m.group(1), 0.65, line)
 
         if not result.location_city.value:
-            m = re.search(r"\bin\s+([\w\s,\-]+?)(?:,\s*Stadt|,\s*Kreis|\s+für\s+|\s*$)", line, re.I)
+            m = re.search(
+                r"\bin\s+([\w\s,\-]+?)(?:,\s*Stadt|,\s*Kreis|\s+für\s+|\s*$)",
+                line,
+                re.I,
+            )
             if m:
                 city = m.group(1).strip().rstrip(",")
                 if 3 <= len(city) <= 60:

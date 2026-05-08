@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 import app.logger as ops_logger
 from app.db import (
     check_existing,
+    clear_db,
     get_listing,
     get_price_history,
     init_db,
@@ -118,6 +119,7 @@ async def upload_screenshot(file: UploadFile = File(...)) -> dict[str, Any]:
             "vehicle_type": _fe(extraction.vehicle_type),
             "location_city": _fe(extraction.location_city),
             "condition": _fe(extraction.condition),
+            "seller_type": _fe(extraction.seller_type),
         },
     }
 
@@ -207,7 +209,7 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         drivetrain_or_gearbox_normalized=harmonized["drivetrain_or_gearbox_normalized"],
         marketing_tags_json=harmonized["marketing_tags_json"],
         ownership_hint=harmonized["ownership_hint"],
-        seller_normalized=harmonized["seller_normalized"],
+        seller_normalized=_get("seller_type") or harmonized["seller_normalized"],
         title_raw=harmonized["title_raw"],
         title_harmonized=harmonized["title_harmonized"],
         year=year,
@@ -255,6 +257,13 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         _UPLOAD_IMAGE_CACHE.pop(image_hash, None)
 
     return {"id": row_id, "action": action}
+
+
+@application.delete("/api/clear-db")
+def clear_all_listings() -> dict[str, str]:
+    """Delete all listings and price history, reset autoincrement counters."""
+    clear_db()
+    return {"status": "cleared"}
 
 
 @application.get("/api/listings")
@@ -366,7 +375,9 @@ def update_listing(listing_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     if "seller_normalized" in payload:
         seller = _clean_text(payload.get("seller_normalized"))
         if seller and seller not in ("Händler", "Privat"):
-            raise HTTPException(status_code=400, detail="Seller must be Händler or Privat")
+            raise HTTPException(
+                status_code=400, detail="Seller must be Händler or Privat"
+            )
         updates["seller_normalized"] = seller
         updates["condition"] = seller
 
@@ -396,10 +407,9 @@ def update_listing(listing_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     updates["marketing_tags_json"] = harmonized["marketing_tags_json"]
     updates["ownership_hint"] = harmonized["ownership_hint"]
     if "seller_normalized" not in updates:
-        updates["seller_normalized"] = (
-            harmonized["seller_normalized"]
-            or normalize_seller_type(merged.get("condition"))
-        )
+        updates["seller_normalized"] = harmonized[
+            "seller_normalized"
+        ] or normalize_seller_type(merged.get("condition"))
     updates["title_raw"] = harmonized["title_raw"]
     updates["title_harmonized"] = harmonized["title_harmonized"]
 

@@ -110,6 +110,25 @@ def init_db(path: str | None = None) -> None:
         _ensure_column(conn, "vehicle_listings", "title_harmonized", "TEXT")
 
 
+def clear_db(path: str | None = None) -> None:
+    """Delete all rows from both tables and reset autoincrement counters."""
+    if path is not None:
+        global DB_PATH
+        DB_PATH = path
+    with _connect() as conn:
+        conn.execute("DELETE FROM listing_price_history")
+        conn.execute("DELETE FROM vehicle_listings")
+        conn.execute(
+            "DELETE FROM sqlite_sequence WHERE name IN "
+            "('vehicle_listings', 'listing_price_history')"
+        )
+
+
+def clear_database(path: str | None = None) -> None:
+    """Alias for clear_db for future scripts and maintenance tasks."""
+    clear_db(path)
+
+
 def _ensure_column(
     conn: sqlite3.Connection, table: str, column: str, column_type: str
 ) -> None:

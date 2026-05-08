@@ -102,6 +102,9 @@ class ExtractionResult:
     vehicle_type: FieldExtraction = field(
         default_factory=lambda: FieldExtraction(None, 0.0)
     )
+    seller_type: FieldExtraction = field(
+        default_factory=lambda: FieldExtraction(None, 0.0)
+    )
     ocr_text: str = ""
 
     def overall_confidence(self) -> float:
@@ -144,5 +147,6 @@ class ExtractionResult:
             vehicle_type=self.vehicle_type.value,
             location_city=self.location_city.value,
             condition=self.condition.value,
+            seller_normalized=self.seller_type.value,
             ocr_confidence_overall=self.overall_confidence(),
         )
