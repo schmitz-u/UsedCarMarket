@@ -9,23 +9,32 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 import app.logger as ops_logger
 from app.db import (
     check_existing,
+    get_listing,
     get_price_history,
     init_db,
     query_listings,
+    update_listing_fields,
     upsert_listing,
 )
 from app.extractors import detect_and_extract
 from app.models import VehicleListing
-from app.normalizers import generate_fingerprint
+from app.normalizers import (
+    generate_fingerprint,
+    harmonize_listing_title,
+    normalize_seller_type,
+    validate_harmonized_listing,
+    HarmonizationConflict,
+)
 from app.ocr import run_ocr_from_bytes
 
 STATIC_DIR = Path(__file__).parent / "static"
+_UPLOAD_IMAGE_CACHE: dict[str, tuple[bytes, str]] = {}
 
 
 @asynccontextmanager
@@ -60,19 +69,26 @@ async def upload_screenshot(file: UploadFile = File(...)) -> dict[str, Any]:
 
     data = await file.read()
     image_hash = hashlib.sha256(data).hexdigest()
+    content_type = file.content_type or "image/png"
+    _UPLOAD_IMAGE_CACHE[image_hash] = (data, content_type)
 
     ocr_text = run_ocr_from_bytes(data)
 
     extraction = detect_and_extract(ocr_text)
     extraction.ocr_text = ocr_text
 
-    ops_logger.log_upload(file.filename or "", image_hash, extraction.source_marketplace)
+    ops_logger.log_upload(
+        file.filename or "", image_hash, extraction.source_marketplace
+    )
     ops_logger.log_ocr(image_hash, len(ocr_text), extraction.overall_confidence())
 
     listing = extraction.to_vehicle_listing()
     fingerprint = generate_fingerprint(
-        listing.brand, listing.model, listing.year,
-        listing.mileage_km, listing.price_amount,
+        listing.brand,
+        listing.model,
+        listing.year,
+        listing.mileage_km,
+        listing.price_amount,
     )
 
     existing_id = check_existing(listing.url, fingerprint)
@@ -119,6 +135,13 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
     fields = payload.get("fields", {})
     image_hash = payload.get("image_hash")
     filename = payload.get("filename")
+    image_blob: bytes | None = None
+    image_mime_type: str | None = None
+
+    if image_hash:
+        cached_image = _UPLOAD_IMAGE_CACHE.get(image_hash)
+        if cached_image:
+            image_blob, image_mime_type = cached_image
 
     def _get(name: str) -> Optional[str]:
         v = fields.get(name, {})
@@ -132,7 +155,9 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         try:
             return float(raw)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid numeric value for {field}: {raw!r}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid numeric value for {field}: {raw!r}"
+            )
 
     def _to_int(raw: Optional[str], field: str = "value") -> Optional[int]:
         if not raw:
@@ -140,7 +165,9 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         try:
             return int(raw)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid integer value for {field}: {raw!r}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid integer value for {field}: {raw!r}"
+            )
 
     price = _to_float(_get("price_amount"), "price_amount")
     year = _to_int(_get("year"), "year")
@@ -151,6 +178,16 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
 
     url = _get("url")
     brand = _get("brand")
+    model = _get("model")
+    transmission = _get("transmission")
+    condition = _get("condition")
+
+    harmonized = harmonize_listing_title(brand, model, transmission, condition, year)
+
+    try:
+        validate_harmonized_listing(harmonized, year)
+    except HarmonizationConflict as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     if not url and not brand:
         raise HTTPException(
@@ -162,7 +199,17 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         source_marketplace=payload.get("portal"),
         url=url,
         brand=brand,
-        model=_get("model"),
+        model=model,
+        brand_normalized=harmonized["brand_normalized"],
+        model_family_normalized=harmonized["model_family_normalized"],
+        model_variant_normalized=harmonized["model_variant_normalized"],
+        trim_normalized=harmonized["trim_normalized"],
+        drivetrain_or_gearbox_normalized=harmonized["drivetrain_or_gearbox_normalized"],
+        marketing_tags_json=harmonized["marketing_tags_json"],
+        ownership_hint=harmonized["ownership_hint"],
+        seller_normalized=harmonized["seller_normalized"],
+        title_raw=harmonized["title_raw"],
+        title_harmonized=harmonized["title_harmonized"],
         year=year,
         first_registration=_get("first_registration"),
         mileage_km=mileage,
@@ -172,13 +219,15 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         engine_displacement_cc=disp,
         power_kw=power,
         fuel_type=_get("fuel_type"),
-        transmission=_get("transmission"),
+        transmission=transmission,
         color=_get("color"),
         vehicle_category=_get("vehicle_category"),
         vehicle_type=_get("vehicle_type"),
         location_city=_get("location_city"),
-        condition=_get("condition"),
+        condition=condition,
         source_image_hash=image_hash,
+        source_image_mime_type=image_mime_type,
+        source_image_bytes=image_blob,
         source_image_path=filename,
     )
 
@@ -188,11 +237,22 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         ops_logger.log_error("save", str(exc))
         raise HTTPException(status_code=500, detail=str(exc))
 
-    ops_logger.log_save(row_id, listing.url,
-                        generate_fingerprint(listing.brand, listing.model,
-                                             listing.year, listing.mileage_km,
-                                             listing.price_amount),
-                        action, price)
+    ops_logger.log_save(
+        row_id,
+        listing.url,
+        generate_fingerprint(
+            listing.brand,
+            listing.model,
+            listing.year,
+            listing.mileage_km,
+            listing.price_amount,
+        ),
+        action,
+        price,
+    )
+
+    if image_hash:
+        _UPLOAD_IMAGE_CACHE.pop(image_hash, None)
 
     return {"id": row_id, "action": action}
 
@@ -209,17 +269,153 @@ def list_listings(
     price_min: Optional[float] = None,
     price_max: Optional[float] = None,
 ) -> list[dict[str, Any]]:
-    return query_listings(
-        source=source, brand=brand, model=model,
-        year_min=year_min, year_max=year_max,
-        km_min=km_min, km_max=km_max,
-        price_min=price_min, price_max=price_max,
+    rows = query_listings(
+        source=source,
+        brand=brand,
+        model=model,
+        year_min=year_min,
+        year_max=year_max,
+        km_min=km_min,
+        km_max=km_max,
+        price_min=price_min,
+        price_max=price_max,
     )
+    for row in rows:
+        has_image = bool(row.get("has_image"))
+        row["has_image"] = has_image
+        row["image_url"] = f"/api/listings/{row['id']}/image" if has_image else None
+    return rows
 
 
 @application.get("/api/listings/{listing_id}/price_history")
 def price_history(listing_id: int) -> list[dict[str, Any]]:
     return get_price_history(listing_id)
+
+
+@application.get("/api/listings/{listing_id}/image")
+def listing_image(listing_id: int) -> Response:
+    listing = get_listing(listing_id)
+    if not listing or listing.get("source_image_blob") is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return Response(
+        content=listing["source_image_blob"],
+        media_type=listing.get("source_image_mime_type") or "image/png",
+    )
+
+
+@application.put("/api/listings/{listing_id}")
+def update_listing(listing_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    existing = get_listing(listing_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    def _clean_text(v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
+
+    def _to_int(v: Any, field: str) -> Optional[int]:
+        if v is None or v == "":
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"Invalid integer for {field}")
+
+    def _to_float(v: Any, field: str) -> Optional[float]:
+        if v is None or v == "":
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"Invalid number for {field}")
+
+    updates: dict[str, Any] = {}
+    if "source_marketplace" in payload:
+        updates["source_marketplace"] = _clean_text(payload.get("source_marketplace"))
+    if "url" in payload:
+        updates["url"] = _clean_text(payload.get("url"))
+    if "brand" in payload:
+        updates["brand"] = _clean_text(payload.get("brand"))
+    if "model" in payload:
+        updates["model"] = _clean_text(payload.get("model"))
+    if "year" in payload:
+        updates["year"] = _to_int(payload.get("year"), "year")
+    if "mileage_km" in payload:
+        updates["mileage_km"] = _to_int(payload.get("mileage_km"), "mileage_km")
+    if "price_amount" in payload:
+        updates["price_amount"] = _to_float(payload.get("price_amount"), "price_amount")
+    if "price_currency" in payload:
+        updates["price_currency"] = _clean_text(payload.get("price_currency")) or "EUR"
+    if "fuel_type" in payload:
+        updates["fuel_type"] = _clean_text(payload.get("fuel_type"))
+    if "transmission" in payload:
+        updates["transmission"] = _clean_text(payload.get("transmission"))
+    if "color" in payload:
+        updates["color"] = _clean_text(payload.get("color"))
+    if "location_city" in payload:
+        updates["location_city"] = _clean_text(payload.get("location_city"))
+    if "engine_displacement_cc" in payload:
+        updates["engine_displacement_cc"] = _to_int(
+            payload.get("engine_displacement_cc"), "engine_displacement_cc"
+        )
+    if "trim_normalized" in payload:
+        updates["trim_normalized"] = _clean_text(payload.get("trim_normalized"))
+    if "seller_normalized" in payload:
+        seller = _clean_text(payload.get("seller_normalized"))
+        if seller and seller not in ("Händler", "Privat"):
+            raise HTTPException(status_code=400, detail="Seller must be Händler or Privat")
+        updates["seller_normalized"] = seller
+        updates["condition"] = seller
+
+    merged = dict(existing)
+    merged.update({k: v for k, v in updates.items() if v is not None or k in updates})
+
+    harmonized = harmonize_listing_title(
+        merged.get("brand"),
+        merged.get("model"),
+        merged.get("transmission"),
+        merged.get("condition"),
+        merged.get("year"),
+    )
+    try:
+        validate_harmonized_listing(harmonized, merged.get("year"))
+    except HarmonizationConflict as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    updates["brand_normalized"] = harmonized["brand_normalized"]
+    updates["model_family_normalized"] = harmonized["model_family_normalized"]
+    updates["model_variant_normalized"] = harmonized["model_variant_normalized"]
+    updates["drivetrain_or_gearbox_normalized"] = harmonized[
+        "drivetrain_or_gearbox_normalized"
+    ]
+    if "trim_normalized" not in updates:
+        updates["trim_normalized"] = harmonized["trim_normalized"]
+    updates["marketing_tags_json"] = harmonized["marketing_tags_json"]
+    updates["ownership_hint"] = harmonized["ownership_hint"]
+    if "seller_normalized" not in updates:
+        updates["seller_normalized"] = (
+            harmonized["seller_normalized"]
+            or normalize_seller_type(merged.get("condition"))
+        )
+    updates["title_raw"] = harmonized["title_raw"]
+    updates["title_harmonized"] = harmonized["title_harmonized"]
+
+    fp = generate_fingerprint(
+        merged.get("brand"),
+        merged.get("model"),
+        merged.get("year"),
+        merged.get("mileage_km"),
+        merged.get("price_amount"),
+    )
+    updates["listing_fingerprint"] = fp
+
+    row = update_listing_fields(listing_id, updates, source_event_type="manual_edit")
+    if not row:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return {"id": listing_id, "action": "updated"}
 
 
 @application.get("/api/logs")

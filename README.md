@@ -86,13 +86,14 @@ UCM_DB_PATH=/data/ucm.db uvicorn app.main:application --reload
 
 ## Usage Workflow
 
-1. **Upload & Review tab** — drag-and-drop or choose a PNG/JPG screenshot.
+1. **Upload & Review tab** — drag-and-drop, choose a PNG/JPG screenshot, or paste a screenshot from the clipboard with **Ctrl+V**.
 2. The app runs OCR, detects the portal (mobile.de or AutoScout24), and
    populates the review form with extracted values colour-coded by confidence.
 3. Correct any low-confidence or missing fields, then click **Save to Database**.
-4. **Analysis tab** — apply filters (brand, model, year/KM/price ranges) and
-   explore the scatter chart (x=year, y=mileage, colour=price).  A newly saved
-   entry is visually highlighted with a star marker.
+4. **Analysis tab** — apply filters (brand, model, year/KM/price ranges),
+  review screenshot thumbnails in the listings table, and hover scatter points
+  (x=year, y=mileage, colour=price) to preview the stored screenshot.  A newly
+  saved entry is visually highlighted with a star marker.
 5. **Logs tab** — view all operation events and export them as JSON for
    troubleshooting.
 

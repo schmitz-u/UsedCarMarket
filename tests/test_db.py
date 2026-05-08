@@ -112,6 +112,18 @@ class TestQueryListings:
         prices = [r["price_amount"] for r in results]
         assert all(p >= 6000.0 for p in prices)
 
+    def test_seller_normalized_persisted_and_queryable(self, db):
+        db.upsert_listing(
+            make_listing(
+                url="https://seller.com/1",
+                condition="Händler",
+                seller_normalized="Händler",
+            )
+        )
+        results = db.query_listings()
+        row = next(r for r in results if r["url"] == "https://seller.com/1")
+        assert row["seller_normalized"] == "Händler"
+
 
 class TestCheckExisting:
     def test_finds_by_url(self, db):
@@ -132,3 +144,31 @@ class TestCheckExisting:
     def test_returns_none_when_absent(self, db):
         found = db.check_existing("https://notexist.com/99", "fakefp")
         assert found is None
+
+
+class TestUpdateListingFields:
+    def test_updates_selected_fields(self, db):
+        listing = make_listing(url="https://edit.com/1", brand="Honda", model="Gold Wing")
+        row_id, _ = db.upsert_listing(listing)
+
+        row = db.update_listing_fields(
+            row_id,
+            {"brand": "BMW", "model": "R 1250 RT", "location_city": "Berlin"},
+        )
+
+        assert row is not None
+        assert row["brand"] == "BMW"
+        assert row["model"] == "R 1250 RT"
+        assert row["location_city"] == "Berlin"
+
+    def test_price_update_appends_manual_history(self, db):
+        listing = make_listing(url="https://edit.com/2", price_amount=10000.0)
+        row_id, _ = db.upsert_listing(listing)
+        before = db.get_price_history(row_id)
+
+        db.update_listing_fields(row_id, {"price_amount": 9500.0})
+        after = db.get_price_history(row_id)
+
+        assert len(after) == len(before) + 1
+        assert after[-1]["observed_price_amount"] == 9500.0
+        assert after[-1]["source_event_type"] == "manual_edit"
