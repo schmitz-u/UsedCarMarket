@@ -53,5 +53,10 @@ See the full PRD: `Docs/Specs/PRD-Browser-Extension-Used-Vehicle-Market.md`
 - Do not add comments or docstrings to code that was not modified in the current task.
 - Do not add error handling for scenarios that cannot happen.
 
+## Utility Reuse Policy
+- Prefer existing utility functions/modules over ad-hoc shell command sequences.
+- Before introducing a new command-line workflow, check whether an equivalent helper already exists in the codebase and use it.
+- If a reusable utility is missing, add one in Python code and call that utility instead of repeating one-off command lines across tasks.
+
 ## Build & Test
 _To be defined in Milestone 1. Update this section when the toolchain is established._

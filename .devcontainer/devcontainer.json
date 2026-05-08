@@ -1,0 +1,45 @@
+{
+  "name": "Used Vehicle Market Analyzer",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+  ],
+  "forwardPorts": [
+    8000
+  ],
+  "portsAttributes": {
+    "8000": {
+      "label": "App (FastAPI)",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "editor.formatOnSave": true,
+        "workbench.colorCustomizations": {
+          "statusBar.background": "#1f7a1f",
+          "statusBar.foreground": "#ffffff",
+          "statusBar.noFolderBackground": "#1f7a1f",
+          "statusBar.noFolderForeground": "#ffffff"
+        }
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "features": {}
+}
