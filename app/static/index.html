@@ -1076,16 +1076,16 @@
         [0.8667, '#e24330'], [0.9333, '#e24330'],
         [0.9333, '#d7191c'], [1.0000, '#d7191c'],
       ];
-      const hoverText = valid.map(r =>
-        `${r.brand || ''} ${r.model || ''}<br>Year: ${r.year}<br>KM: ${fmt(r.mileage_km)}<br>Price: ${fmt(r.price_amount)} €`
-      );
-      const trace = {
-        x: valid.map(r => r.year),
-        y: valid.map(r => r.mileage_km),
+      const buildTrace = (subset, name, symbol, showScale) => ({
+        x: subset.map(r => r.year),
+        y: subset.map(r => r.mileage_km),
         mode: 'markers',
         type: 'scatter',
-        text: hoverText,
-        customdata: valid.map(r => [
+        name,
+        text: subset.map(r =>
+          `${r.brand || ''} ${r.model || ''}<br>Type: ${r.trim_normalized || '—'}<br>Year: ${r.year}<br>KM: ${fmt(r.mileage_km)}<br>Price: ${fmt(r.price_amount)} €`
+        ),
+        customdata: subset.map(r => [
           r.image_url || '',
           r.brand || '',
           r.model || '',
@@ -1095,27 +1095,60 @@
         ]),
         hovertemplate: '%{text}<extra></extra>',
         marker: {
-          size: 11,
-          color: prices,
+          size: subset.map(r => r.id === _lastSavedId ? 14 : 11),
+          color: subset.map(r => r.price_amount ?? null),
           colorscale: distinctPriceScale,
-          colorbar: {
-            title: 'Price (€)',
-            thickness: 16,
-            tickprefix: '€',
-            separatethousands: true,
+          showscale: showScale,
+          colorbar: showScale
+            ? {
+              title: 'Price (€)',
+              thickness: 16,
+              tickprefix: '€',
+              separatethousands: true,
+            }
+            : undefined,
+          line: {
+            color: subset.map(r => r.id === _lastSavedId ? '#111' : '#555'),
+            width: subset.map(r => r.id === _lastSavedId ? 1.8 : 0.5),
           },
-          line: { color: '#555', width: 0.5 },
-          symbol: valid.map(r => r.id === _lastSavedId ? 'star' : 'circle'),
+          symbol,
         },
-      };
+      });
+
+      const isBagger = r => (r.trim_normalized || '').toLowerCase().includes('bagger');
+      const isTour = r => (r.trim_normalized || '').toLowerCase().includes('tour');
+
+      const baggerRows = valid.filter(isBagger);
+      const tourRows = valid.filter(r => !isBagger(r) && isTour(r));
+      const otherRows = valid.filter(r => !isBagger(r) && !isTour(r));
+
+      const traces = [];
+      let scaleAssigned = false;
+      if (tourRows.length) {
+        traces.push(buildTrace(tourRows, 'Tour', 'circle', !scaleAssigned));
+        scaleAssigned = true;
+      }
+      if (baggerRows.length) {
+        traces.push(buildTrace(baggerRows, 'Bagger', 'square', !scaleAssigned));
+        scaleAssigned = true;
+      }
+      if (otherRows.length) {
+        traces.push(buildTrace(otherRows, 'Other / Unknown', 'diamond', !scaleAssigned));
+      }
+
       const layout = {
         xaxis: { title: 'Year', dtick: 1 },
         yaxis: { title: 'Mileage (km)' },
         margin: { t: 20, b: 60, l: 70, r: 20 },
         paper_bgcolor: '#fff',
         plot_bgcolor: '#f8f9fa',
+        legend: {
+          orientation: 'h',
+          y: 1.12,
+          x: 0,
+        },
       };
-      Plotly.react('scatter-chart', [trace], layout, { responsive: true });
+      Plotly.react('scatter-chart', traces, layout, { responsive: true });
 
       if (!_scatterHoverBound) {
         const chart = $('scatter-chart');

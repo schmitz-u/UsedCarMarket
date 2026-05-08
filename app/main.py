@@ -206,7 +206,9 @@ async def save_listing(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     if disp is None:
-        disp = infer_engine_displacement_cc(harmonized["model_variant_normalized"], year)
+        disp = infer_engine_displacement_cc(
+            harmonized["model_variant_normalized"], year
+        )
 
     canonical_variant = harmonized["model_variant_normalized"]
     canonical_series = harmonized.get("series_identifier")

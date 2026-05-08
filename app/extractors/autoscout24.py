@@ -150,7 +150,9 @@ def _extract_label_value_fields(lines: list[str], result: ExtractionResult) -> N
             for nxt in next_lines:
                 m = _FUEL_PATTERN.search(nxt)
                 if m:
-                    result.fuel_type = FieldExtraction(_canon_fuel(m.group(1)), 0.9, nxt)
+                    result.fuel_type = FieldExtraction(
+                        _canon_fuel(m.group(1)), 0.9, nxt
+                    )
                     break
             if not result.fuel_type.value:
                 m = _FUEL_PATTERN.search(line)

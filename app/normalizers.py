@@ -239,9 +239,7 @@ def validate_harmonized_listing(
         if trim in _TRIM_YEAR_RANGES:
             lo, hi = _TRIM_YEAR_RANGES[trim]
             hi_display = hi if hi is not None else "present"
-            if year < lo or (
-                hi is not None and year > hi + _REGISTRATION_LAG_YEARS
-            ):
+            if year < lo or (hi is not None and year > hi + _REGISTRATION_LAG_YEARS):
                 raise HarmonizationConflict(
                     f"Year {year} is outside the known production range "
                     f"{lo}–{hi_display} for trim '{trim}'."
