@@ -569,6 +569,16 @@
 
       <div class="card">
         <h2>Scatter Plot — Year vs. Mileage (colour = price)</h2>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:0 0 8px 2px;font-size:.9rem;color:#334155">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="risk-recall-toggle" checked />
+            Recall-based risk bands
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="risk-experience-toggle" checked />
+            Experience-based risk bands
+          </label>
+        </div>
         <div id="scatter-chart"></div>
       </div>
 
@@ -1058,6 +1068,26 @@
         Plotly.purge('scatter-chart');
         return;
       }
+      const recallYearRanges = [
+        [1978, 1978],
+        [1984, 1984],
+        [1988, 1990],
+        [1997, 1997],
+        [2001, 2004],
+        [2006, 2016],
+        [2018, 2024],
+      ];
+      const experienceYearRanges = [
+        [1978, 1979],
+        [1984, 1985],
+        [1994, 1995],
+        [2001, 2004],
+        [2006, 2006],
+        [2010, 2010],
+      ];
+
+      const showRecallBands = $('risk-recall-toggle')?.checked !== false;
+      const showExperienceBands = $('risk-experience-toggle')?.checked !== false;
       const prices = valid.map(r => r.price_amount ?? null);
       const distinctPriceScale = [
         [0.0000, '#2b83ba'], [0.0667, '#2b83ba'],
@@ -1079,12 +1109,15 @@
       const buildTrace = (subset, name, symbol, showScale) => ({
         x: subset.map(r => r.year),
         y: subset.map(r => r.mileage_km),
-        mode: 'markers',
+        mode: 'markers+text',
         type: 'scatter',
         name,
-        text: subset.map(r =>
+        hovertext: subset.map(r =>
           `${r.brand || ''} ${r.model || ''}<br>Type: ${r.trim_normalized || '—'}<br>Year: ${r.year}<br>KM: ${fmt(r.mileage_km)}<br>Price: ${fmt(r.price_amount)} €`
         ),
+        text: subset.map(r => r.price_amount != null ? `${fmt(r.price_amount)} €` : '—'),
+        textposition: 'top center',
+        textfont: { size: 10, color: '#243447' },
         customdata: subset.map(r => [
           r.image_url || '',
           r.brand || '',
@@ -1093,7 +1126,7 @@
           r.mileage_km ?? '',
           r.price_amount ?? '',
         ]),
-        hovertemplate: '%{text}<extra></extra>',
+        hovertemplate: '%{hovertext}<extra></extra>',
         marker: {
           size: subset.map(r => r.id === _lastSavedId ? 14 : 11),
           color: subset.map(r => r.price_amount ?? null),
@@ -1142,6 +1175,64 @@
         margin: { t: 20, b: 60, l: 70, r: 20 },
         paper_bgcolor: '#fff',
         plot_bgcolor: '#f8f9fa',
+        shapes: [
+          ...(showRecallBands ? recallYearRanges.map(([start, end]) => ({
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: start - 0.5,
+            x1: end + 0.5,
+            y0: 0,
+            y1: 1,
+            fillcolor: 'rgba(231, 76, 60, 0.10)',
+            line: { width: 0 },
+            layer: 'below',
+          })) : []),
+          ...(showExperienceBands ? experienceYearRanges.map(([start, end]) => ({
+            type: 'rect',
+            xref: 'x',
+            yref: 'paper',
+            x0: start - 0.5,
+            x1: end + 0.5,
+            y0: 0,
+            y1: 1,
+            fillcolor: 'rgba(245, 158, 11, 0.08)',
+            line: { width: 0 },
+            layer: 'below',
+          })) : []),
+        ],
+        annotations: [
+          ...(showRecallBands ? [{
+            xref: 'paper',
+            yref: 'paper',
+            x: 0.99,
+            y: 1.10,
+            xanchor: 'right',
+            yanchor: 'bottom',
+            text: 'Red bands: recall-based risk windows',
+            showarrow: false,
+            font: { size: 11, color: '#8e2a2a' },
+            bgcolor: 'rgba(231, 76, 60, 0.12)',
+            bordercolor: 'rgba(231, 76, 60, 0.25)',
+            borderwidth: 1,
+            borderpad: 4,
+          }] : []),
+          ...(showExperienceBands ? [{
+            xref: 'paper',
+            yref: 'paper',
+            x: 0.99,
+            y: 1.05,
+            xanchor: 'right',
+            yanchor: 'bottom',
+            text: 'Amber bands: community/experience reports',
+            showarrow: false,
+            font: { size: 11, color: '#8a4b07' },
+            bgcolor: 'rgba(245, 158, 11, 0.14)',
+            bordercolor: 'rgba(245, 158, 11, 0.3)',
+            borderwidth: 1,
+            borderpad: 4,
+          }] : []),
+        ],
         legend: {
           orientation: 'h',
           y: 1.12,
@@ -1159,6 +1250,8 @@
     }
 
     $('apply-filters-btn').addEventListener('click', loadListings);
+    $('risk-recall-toggle').addEventListener('change', () => renderChart(_analysisRows));
+    $('risk-experience-toggle').addEventListener('change', () => renderChart(_analysisRows));
     $('reset-filters-btn').addEventListener('click', () => {
       ['f-source', 'f-brand', 'f-model', 'f-year-min', 'f-year-max', 'f-km-min', 'f-km-max', 'f-price-min', 'f-price-max']
         .forEach(id => { const el = $(id); if (el.tagName === 'SELECT') el.value = ''; else el.value = ''; });
