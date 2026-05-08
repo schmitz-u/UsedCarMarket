@@ -554,6 +554,12 @@
             </select></div>
           <div><label>Brand</label><input id="f-brand" placeholder="e.g. Honda" /></div>
           <div><label>Model</label><input id="f-model" placeholder="e.g. Gold Wing" /></div>
+          <div><label>Type</label><select id="f-type">
+              <option value="">All</option>
+              <option value="tour">Tour</option>
+              <option value="bagger">Bagger</option>
+              <option value="other">Other</option>
+            </select></div>
           <div><label>Year from</label><input id="f-year-min" type="number" placeholder="2010" /></div>
           <div><label>Year to</label><input id="f-year-max" type="number" placeholder="2026" /></div>
           <div><label>KM from</label><input id="f-km-min" type="number" placeholder="0" /></div>
@@ -875,8 +881,18 @@
 
       try {
         const rows = await fetchJson('/api/listings?' + params, 12000);
-        renderTable(rows);
-        renderChart(rows);
+        const typeFilter = $('f-type').value;
+        const classifyType = (row) => {
+          const t = (row.trim_normalized || '').toLowerCase();
+          if (t.includes('bagger')) return 'bagger';
+          if (t.includes('tour')) return 'tour';
+          return 'other';
+        };
+        const filteredRows = typeFilter
+          ? rows.filter(r => classifyType(r) === typeFilter)
+          : rows;
+        renderTable(filteredRows);
+        renderChart(filteredRows);
       } catch (err) {
         $('listing-count').textContent = '0';
         tbody.innerHTML = `<tr><td colspan="18" style="color:#e74c3c">Loading failed: ${escHtml(err.message || 'unknown error')}</td></tr>`;
@@ -1258,7 +1274,7 @@
     $('risk-recall-toggle').addEventListener('change', () => renderChart(_analysisRows));
     $('risk-experience-toggle').addEventListener('change', () => renderChart(_analysisRows));
     $('reset-filters-btn').addEventListener('click', () => {
-      ['f-source', 'f-brand', 'f-model', 'f-year-min', 'f-year-max', 'f-km-min', 'f-km-max', 'f-price-min', 'f-price-max']
+      ['f-source', 'f-brand', 'f-model', 'f-type', 'f-year-min', 'f-year-max', 'f-km-min', 'f-km-max', 'f-price-min', 'f-price-max']
         .forEach(id => { const el = $(id); if (el.tagName === 'SELECT') el.value = ''; else el.value = ''; });
       loadListings();
     });
