@@ -1116,7 +1116,11 @@
         hovertext: subset.map(r =>
           `${r.brand || ''} ${r.model || ''}<br>Type: ${r.trim_normalized || '—'}<br>Year: ${r.year}<br>KM: ${fmt(r.mileage_km)}<br>Price: ${fmt(r.price_amount)} €`
         ),
-        text: subset.map(r => r.price_amount != null ? `${fmt(r.price_amount)} €` : '—'),
+        text: subset.map(r => {
+          const priceLabel = r.price_amount != null ? `${fmt(r.price_amount)} €` : '—';
+          const refLabel = `Ref ${r.id}`;
+          return `${priceLabel} | ${refLabel}`;
+        }),
         textposition: 'top center',
         textfont: { size: 10, color: '#243447' },
         customdata: subset.map(r => [
