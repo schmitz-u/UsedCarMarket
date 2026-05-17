@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vehicle Market Analyzer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Vehicle Market Analyzer</h1>
+    </header>
+
+    <section id="current-listing">
+      <div id="listing-status">Currently viewing: <span id="status-text">—</span></div>
+      <button id="save-btn" disabled>💾 Save to DB</button>
+    </section>
+
+    <section id="filters">
+      <div class="filter-row">
+        <input type="text" id="filter-brand" placeholder="Brand">
+        <input type="text" id="filter-model" placeholder="Model">
+      </div>
+      <div class="filter-row">
+        <input type="number" id="filter-year-min" placeholder="Year from">
+        <input type="number" id="filter-year-max" placeholder="Year to">
+      </div>
+      <div class="filter-row">
+        <input type="number" id="filter-km-min" placeholder="KM min">
+        <input type="number" id="filter-km-max" placeholder="KM max">
+      </div>
+      <div class="filter-row">
+        <input type="number" id="filter-price-min" placeholder="Price min">
+        <input type="number" id="filter-price-max" placeholder="Price max">
+      </div>
+      <div class="filter-row">
+        <select id="filter-source">
+          <option value="">All sources</option>
+          <option value="mobile.de">mobile.de</option>
+          <option value="autoscout24.de">autoscout24.de</option>
+        </select>
+      </div>
+    </section>
+
+    <div id="results-count">0 listings</div>
+
+    <div id="chart-container">
+      <canvas id="scatter-chart"></canvas>
+    </div>
+
+    <ul id="listings-list"></ul>
+  </div>
+  <script type="module" src="index.ts"></script>
+</body>
+</html>
